@@ -42,26 +42,18 @@ type AdmissionResult = {
   admittedMajors?: string;
 };
 
-type CaptchaResponse = {
-  ok: boolean;
-  imageDataUrl?: string;
-  codeToken?: string;
-  message?: string;
+type UpstreamCaptchaResponse = {
+  code?: string;
+  data?: {
+    img?: string;
+    codeToken?: string;
+  };
 };
 
-type QueryResponse =
-  | {
-      ok: true;
-      type: QueryType;
-      data: ScoreResult | AdmissionResult;
-      message: string;
-    }
-  | {
-      ok: false;
-      type?: QueryType;
-      errorCode?: string;
-      message: string;
-    };
+type UpstreamQueryResponse = {
+  code?: string;
+  data?: ScoreResult | AdmissionResult | null;
+};
 
 const queryTabs: Array<{ type: QueryType; label: string; helper: string }> = [
   {
@@ -90,6 +82,21 @@ const qualityFields = [
   ["艺术素养", "artisticLiteracy"],
   ["创新实践", "innovativePractice"],
 ] as const;
+
+const upstreamBase = "https://xzzs.zsedus.cn:1443/yixiu";
+
+const queryEndpoints: Record<QueryType, string> = {
+  score: "queryScore",
+  admission: "admissionQuery",
+};
+
+const errorMessages: Record<string, string> = {
+  "1001": "验证码错误，请重新输入",
+  "9400": "验证码已过期，请重新输入",
+  ERROR_CODE: "网络错误，请稍后重试",
+  ECONNABORTED: "请求超时，请稍后重试",
+  ERR_NETWORK: "网络错误，请稍后重试",
+};
 
 function normalizeDigits(value: string, maxLength: number) {
   return value.replace(/\D/g, "").slice(0, maxLength);
@@ -126,18 +133,28 @@ export default function Home() {
     setCaptchaError("");
 
     try {
-      const response = await fetch("/api/captcha", {
-        method: "GET",
+      const response = await fetch(`${upstreamBase}/getVCode?width=123&height=45`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
         cache: "no-store",
       });
-      const data = (await response.json()) as CaptchaResponse;
+      const data = (await response.json()) as UpstreamCaptchaResponse;
 
-      if (!response.ok || !data.ok || !data.imageDataUrl || !data.codeToken) {
-        throw new Error(data.message ?? "验证码获取失败");
+      if (
+        !response.ok ||
+        data.code !== "0000" ||
+        !data.data?.img ||
+        !data.data?.codeToken
+      ) {
+        throw new Error("验证码获取失败");
       }
 
-      setCaptchaImage(data.imageDataUrl);
-      setCodeToken(data.codeToken);
+      setCaptchaImage(`data:image/jpeg;base64,${data.data.img}`);
+      setCodeToken(data.data.codeToken);
       setVerifyCode("");
     } catch (error) {
       setCaptchaImage("");
@@ -192,45 +209,49 @@ export default function Home() {
     setResult(null);
 
     try {
-      const response = await fetch("/api/query", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          type: queryType,
-          admissionTicketNumber,
-          bornDateStr,
-          verifyCode,
-          codeToken,
-        }),
+      const params = new URLSearchParams({
+        admissionTicketNumber,
+        bornDateStr,
+        verifyCode: verifyCode.trim(),
+        codeToken,
       });
-
-      const data = (await response.json()) as QueryResponse;
+      const response = await fetch(
+        `${upstreamBase}/midSchoolEntranceExamScore/${queryEndpoints[queryType]}?${params.toString()}`,
+        {
+          method: "GET",
+          headers: {
+            Accept: "application/json, text/plain, */*",
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+        },
+      );
 
       if (!response.ok) {
         setStatus("error");
-        setMessage(data.message ?? "查询失败，请稍后重试");
+        setMessage("网络错误，请稍后重试");
         setResult(null);
         void loadCaptcha();
         return;
       }
 
-      if (!data.ok) {
-        setStatus("error");
-        setMessage(data.message ?? "查询失败，请稍后重试");
-        setResult(null);
+      const data = (await response.json()) as UpstreamQueryResponse;
 
-        if (data.errorCode === "1001" || data.errorCode === "9400") {
-          void loadCaptcha();
-        }
-
+      if (data.code === "0000" && data.data) {
+        setStatus("success");
+        setMessage("查询成功");
+        setResult(data.data);
         return;
       }
 
-      setStatus("success");
-      setMessage(data.message);
-      setResult(data.data);
+      const errorCode = typeof data.code === "string" ? data.code : "UNKNOWN";
+      setStatus("error");
+      setMessage(errorMessages[errorCode] ?? "未查询到相关数据");
+      setResult(null);
+
+      if (errorCode === "1001" || errorCode === "9400") {
+        void loadCaptcha();
+      }
     } catch {
       setStatus("error");
       setMessage("网络错误，请稍后重试");
@@ -448,7 +469,7 @@ function EmptyState({ queryType }: { queryType: QueryType }) {
         {queryType === "score" ? "输入信息后查询成绩" : "输入信息后查询录取结果"}
       </h3>
       <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-600">
-        准考证号、出生年月日和验证码会通过本站服务端代理提交，不会在本地持久化保存。
+        准考证号、出生年月日和验证码只用于本次查询，不会在本地持久化保存。
       </p>
     </div>
   );
