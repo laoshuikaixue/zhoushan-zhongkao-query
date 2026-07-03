@@ -159,7 +159,6 @@ def main():
         if not result["ok"]:
             print(f"[失败] 解密失败！")
             print(f"原因: 请确认校验码输入完整，或解密秘钥是否与线上系统一致。")
-            # print(f"调试信息: {result['error']}")
         else:
             ticket = result["ticket"]
             print(f"[成功] 解密成功！")

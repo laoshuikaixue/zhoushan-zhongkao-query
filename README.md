@@ -29,9 +29,11 @@
 
 ```env
 ENCRYPTION_KEY=your_custom_secret_key_here
+TEST=true
 ```
 
 > ⚠️ **部署前请务必将默认密钥替换为自定义的强密钥**，并确保本地解密时使用相同的密钥。
+> `TEST=true` 时页面会显示“生成模拟录取结果”按钮；生产环境不配置 `TEST` 即可隐藏该按钮。
 
 ### 本地解密核验
 

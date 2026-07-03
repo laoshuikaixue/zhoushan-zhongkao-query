@@ -65,6 +65,10 @@ function hmac(secretKey: string, ...values: Buffer[]) {
   return digest.digest();
 }
 
+export async function isTestEnvironment(): Promise<boolean> {
+  return ["1", "true", "yes", "on"].includes((process.env.TEST ?? "").toLowerCase());
+}
+
 export async function encryptAdmissionData({
   ticket,
   birthDate,

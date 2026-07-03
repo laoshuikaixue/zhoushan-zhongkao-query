@@ -2,7 +2,7 @@
 
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { encryptAdmissionData } from "./actions";
+import { encryptAdmissionData, isTestEnvironment } from "./actions";
 
 type QueryType = "score" | "admission";
 type Status = "idle" | "loading" | "success" | "error";
@@ -56,8 +56,6 @@ const queryLabels: Record<QueryType, string> = {
   admission: "录取查询",
 };
 
-const isDevelopment = process.env.NODE_ENV === "development";
-
 const mockAdmissionResult: Required<AdmissionResult> = {
   id: "2409029113001",
   candidateName: "张三",
@@ -109,6 +107,7 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<ScoreResult | AdmissionResult | null>(null);
+  const [showMockAdmission, setShowMockAdmission] = useState(false);
 
   const loadCaptcha = useCallback(async () => {
     setCaptchaLoading(true);
@@ -149,6 +148,26 @@ export default function Home() {
 
     return () => window.clearTimeout(timer);
   }, [loadCaptcha]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    isTestEnvironment()
+      .then((enabled) => {
+        if (mounted) {
+          setShowMockAdmission(enabled);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setShowMockAdmission(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   function switchType(type: QueryType) {
     setQueryType(type);
@@ -316,7 +335,7 @@ export default function Home() {
             {queryType === "score" ? "查询成绩" : "查询录取结果"}
           </button>
 
-          {isDevelopment ? (
+          {showMockAdmission ? (
             <button className="mock-submit" type="button" onClick={handleMockAdmissionResult}>
               <Icon name="search" />
               生成模拟录取结果
