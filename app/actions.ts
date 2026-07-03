@@ -29,22 +29,22 @@ function packChineseName(name: string) {
     throw new Error("Candidate name must be 4 Chinese characters or fewer");
   }
 
-  let bits = 0n;
+  let bits = BigInt(0);
   let bitLength = 0;
   for (const char of chars) {
     const codePoint = char.codePointAt(0);
     if (codePoint === undefined || codePoint < CJK_BASE || codePoint > CJK_END) {
       throw new Error("Candidate name contains unsupported characters");
     }
-    bits = (bits << 15n) | BigInt(codePoint - CJK_BASE);
+    bits = (bits << BigInt(15)) | BigInt(codePoint - CJK_BASE);
     bitLength += 15;
   }
 
   bits <<= BigInt(64 - bitLength);
   const bytes = Buffer.alloc(8);
   for (let i = 7; i >= 0; i -= 1) {
-    bytes[i] = Number(bits & 0xffn);
-    bits >>= 8n;
+    bytes[i] = Number(bits & BigInt(0xff));
+    bits >>= BigInt(8);
   }
 
   return {
