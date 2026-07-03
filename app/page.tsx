@@ -202,15 +202,13 @@ export default function Home() {
         setStatus("success");
         setMessage("");
         setResult(data.data);
-        return;
+      } else {
+        const errorCode = typeof data.code === "string" ? data.code : "UNKNOWN";
+        setStatus("error");
+        setMessage(errorMessages[errorCode] ?? "未查询到相关数据");
+        setResult(null);
       }
-
-      const errorCode = typeof data.code === "string" ? data.code : "UNKNOWN";
-      setStatus("error");
-      setMessage(errorMessages[errorCode] ?? "未查询到相关数据");
-      setResult(null);
-
-      if (errorCode === "1001" || errorCode === "9400") void loadCaptcha();
+      void loadCaptcha();
     } catch {
       setStatus("error");
       setMessage("网络错误，请稍后重试");
