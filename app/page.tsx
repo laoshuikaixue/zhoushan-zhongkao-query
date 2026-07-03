@@ -298,7 +298,13 @@ export default function Home() {
           </button>
         </form>
 
-        <ResultArea status={status} message={message} queryType={queryType} result={result} />
+        <ResultArea
+          status={status}
+          message={message}
+          queryType={queryType}
+          result={result}
+          birthDateStr={bornDateStr}
+        />
 
         <p className="notice">查询结果仅供参考，最终以官方成绩单和录取通知书为准。</p>
       </section>
@@ -328,11 +334,13 @@ function ResultArea({
   message,
   queryType,
   result,
+  birthDateStr,
 }: {
   status: Status;
   message: string;
   queryType: QueryType;
   result: ScoreResult | AdmissionResult | null;
+  birthDateStr: string;
 }) {
   if (status === "idle") return null;
 
@@ -350,7 +358,7 @@ function ResultArea({
   return queryType === "score" ? (
     <ScoreResultView data={result as ScoreResult} />
   ) : (
-    <AdmissionResultView data={result as AdmissionResult} />
+    <AdmissionResultView data={result as AdmissionResult} birthDateStr={birthDateStr} />
   );
 }
 
@@ -469,18 +477,22 @@ function ScoreResultView({ data }: { data: ScoreResult }) {
   );
 }
 
-function AdmissionResultView({ data }: { data: AdmissionResult }) {
+function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; birthDateStr: string }) {
   const isLiuheng = data.admittedSchools?.includes("舟山市六横中学") ?? false;
   const [verificationCode, setVerificationCode] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (isLiuheng && data.id) {
-      encryptAdmissionData(data.id)
+    if (isLiuheng && data.id && /^\d{8}$/.test(birthDateStr)) {
+      encryptAdmissionData({
+        ticket: data.id,
+        birthDate: birthDateStr,
+        candidateName: data.candidateName,
+      })
         .then(setVerificationCode)
         .catch((err) => console.error("Encryption failed", err));
     }
-  }, [isLiuheng, data.id]);
+  }, [isLiuheng, data.id, data.candidateName, birthDateStr]);
 
   const handleCopy = async () => {
     try {

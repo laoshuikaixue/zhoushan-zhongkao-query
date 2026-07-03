@@ -1,7 +1,6 @@
 import sys
 import hashlib
 import os
-import csv
 import base64
 
 try:
@@ -12,6 +11,17 @@ except ImportError:
     print("请在控制台运行以下命令安装所需依赖：")
     print("pip install cryptography")
     sys.exit(1)
+
+def unpack_digits(data):
+    digits = []
+    for byte in data:
+        high = byte >> 4
+        low = byte & 0x0F
+        if high > 9 or low > 9:
+            raise ValueError("Invalid BCD digit")
+        digits.append(str(high))
+        digits.append(str(low))
+    return "".join(digits)
 
 def decrypt_code(encrypted_str, secret_key):
     try:
@@ -25,65 +35,41 @@ def decrypt_code(encrypted_str, secret_key):
         cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
         decryptor = cipher.decryptor()
         decrypted = decryptor.update(ciphertext) + decryptor.finalize()
+
+        if len(decrypted) == 16 and decrypted[0] == 1:
+            ticket_len = decrypted[1]
+            if ticket_len not in (13, 14):
+                raise ValueError("Invalid ticket length")
+            ticket = unpack_digits(decrypted[2:9])[-ticket_len:]
+            birth_date = unpack_digits(decrypted[9:13])
+            name_hash = decrypted[13:16].hex().upper()
+
+            return {
+                "ok": True,
+                "format": "v2",
+                "ticket": ticket,
+                "birth_date": birth_date,
+                "name_hash": name_hash,
+            }
         
-        # Remove PKCS7 padding
+        # Legacy format: remove PKCS7 padding and return ticket only.
         padding_len = decrypted[-1]
         if padding_len < 1 or padding_len > 16:
             raise ValueError("Invalid padding")
         ticket = decrypted[:-padding_len].decode('utf-8')
         
-        return ticket
+        return {
+            "ok": True,
+            "format": "legacy",
+            "ticket": ticket,
+            "birth_date": None,
+            "name_hash": None,
+        }
     except Exception as e:
-        return f"ERROR:{str(e)}"
-
-def load_student_database():
-    database = {}
-    csv_file = "students.csv"
-    if not os.path.exists(csv_file):
-        return None
-    try:
-        # Support utf-8-sig to automatically handle Excel BOM
-        with open(csv_file, mode='r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            headers = reader.fieldnames
-            if not headers:
-                return None
-            
-            # Map headers to standard fields
-            ticket_col = None
-            name_col = None
-            school_col = None
-            major_col = None
-            
-            for h in headers:
-                h_clean = h.strip()
-                if h_clean in ["准考证号", "准考证", "ticket", "id", "ID"]:
-                    ticket_col = h
-                elif h_clean in ["姓名", "name", "Name"]:
-                    name_col = h
-                elif h_clean in ["毕业学校", "school", "School", "毕业中学"]:
-                    school_col = h
-                elif h_clean in ["录取专业", "major", "Major", "专业"]:
-                    major_col = h
-            
-            # Fallback mappings if headers don't match standard names
-            if not ticket_col:
-                ticket_col = headers[0]
-            if not name_col and len(headers) > 1:
-                name_col = headers[1]
-                
-            for row in reader:
-                ticket = row.get(ticket_col)
-                if ticket:
-                    database[ticket.strip()] = {
-                        "name": row.get(name_col, "未知").strip() if name_col else "未知",
-                        "school": row.get(school_col, "未知").strip() if school_col else "未知",
-                        "major": row.get(major_col, "未知").strip() if major_col else "未知",
-                    }
-        return database
-    except Exception as e:
-        print(f"警告: 读取 students.csv 时发生错误 ({str(e)})")
-        return None
+        return {
+            "ok": False,
+            "error": str(e),
+        }
 
 def main():
     # Attempt to load secret key from environment variable
@@ -94,13 +80,6 @@ def main():
         if not secret_key:
             print("错误: 秘钥不能为空。")
             sys.exit(1)
-            
-    student_db = load_student_database()
-    if student_db is None:
-        print("提示: 未检测到本地 students.csv 录取名单文件。解密后将仅显示准考证号。")
-        print("可以在脚本同目录下放一个 students.csv（包含'准考证号'、'姓名'等列），即可自动显示姓名。")
-    else:
-        print(f"成功加载录取名单：共读取到 {len(student_db)} 条学生记录。")
 
     print("\n==========================================")
     print("      舟山市六横中学录取身份核验工具      ")
@@ -115,28 +94,22 @@ def main():
         if not code:
             continue
             
-        ticket = decrypt_code(code, secret_key)
+        result = decrypt_code(code, secret_key)
         
         print("\n------------------------------------------")
-        if ticket.startswith("ERROR:"):
-            print(f"❌ 解密失败！")
+        if not result["ok"]:
+            print(f"[失败] 解密失败！")
             print(f"原因: 请确认校验码输入完整，或解密秘钥是否与线上系统一致。")
-            # print(f"调试信息: {ticket}")
+            # print(f"调试信息: {result['error']}")
         else:
-            print(f"✅ 解密成功！")
-            print(f" 🆔 解密出准考证号: {ticket}")
-            
-            if student_db:
-                student = student_db.get(ticket)
-                if student:
-                    print(f" 🎉 录取名单匹配成功！学生信息如下：")
-                    print(f"    👤 考生姓名: {student['name']}")
-                    print(f"    🎓 毕业学校: {student['school']}")
-                    print(f"    🔬 录取专业: {student['major']}")
-                else:
-                    print(f" ⚠️  注意：此准考证号在当前的 students.csv 录取名单中未找到记录。")
+            ticket = result["ticket"]
+            print(f"[成功] 解密成功！")
+            print(f"解密出准考证号: {ticket}")
+            if result["format"] == "v2":
+                print(f"解密出出生年月日: {result['birth_date']}")
+                print(f"姓名核验指纹: {result['name_hash']}")
             else:
-                print(" 💡 可以在本地配好 students.csv 后再次查询以关联学生姓名。")
+                print("[注意] 这是旧版校验码，仅包含准考证号。")
         print("------------------------------------------")
 
 if __name__ == "__main__":
