@@ -672,4 +672,16 @@ button, input {
   .captcha-row { grid-template-columns: minmax(0, 1fr) 100px; }
   .mini-grid { grid-template-columns: repeat(2, 1fr); }
   .score-main { grid-template-columns: 1fr; gap: 8px; }
+  .code-value {
+    font-size: 11px;
+    padding: 8px 10px;
+  }
+  .copy-btn {
+    min-width: 58px;
+    padding: 0 12px;
+    font-size: 11px;
+  }
+  .school-tip {
+    padding: 14px;
+  }
 }
