@@ -2,6 +2,7 @@
 
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
+import { encryptAdmissionData } from "./actions";
 
 type QueryType = "score" | "admission";
 type Status = "idle" | "loading" | "success" | "error";
@@ -470,6 +471,26 @@ function ScoreResultView({ data }: { data: ScoreResult }) {
 
 function AdmissionResultView({ data }: { data: AdmissionResult }) {
   const isLiuheng = data.admittedSchools?.includes("舟山市六横中学") ?? false;
+  const [verificationCode, setVerificationCode] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (isLiuheng && data.id) {
+      encryptAdmissionData(data.id)
+        .then(setVerificationCode)
+        .catch((err) => console.error("Encryption failed", err));
+    }
+  }, [isLiuheng, data.id]);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(verificationCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy", err);
+    }
+  };
 
   return (
     <section className="result">
@@ -483,8 +504,28 @@ function AdmissionResultView({ data }: { data: AdmissionResult }) {
 
       {isLiuheng ? (
         <div className="school-tip">
-          <strong>已录取到舟山市六横中学</strong>
-          <span>添加微信 laoshuikaixue，通过后发送此页面截图加入新生交流群。</span>
+          <strong>已录取到舟山市六横中学 🎉</strong>
+          <span className="tip-desc">请扫描下方二维码加入微信新生交流群，并在申请信息中填写校验码进行录取身份核验。</span>
+          
+          <div className="qr-container">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/新生群二维码.png" alt="新生群二维码" className="qr-image" />
+          </div>
+          
+          <div className="code-container">
+            <span className="code-label">入群申请校验码</span>
+            <div className="code-row">
+              <code className="code-value">{verificationCode || "正在生成校验码..."}</code>
+              <button 
+                type="button" 
+                className="copy-btn" 
+                onClick={handleCopy} 
+                disabled={!verificationCode}
+              >
+                {copied ? "已复制" : "复制"}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </section>
