@@ -338,6 +338,7 @@ export default function Home() {
           {showMockAdmission ? (
             <button className="mock-submit" type="button" onClick={handleMockAdmissionResult}>
               <Icon name="search" />
+              <span className="mock-badge">TEST</span>
               生成模拟录取结果
             </button>
           ) : null}
@@ -572,9 +573,11 @@ function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; bi
           <strong>已录取到舟山市六横中学 🎉</strong>
           <span className="tip-desc">请扫描下方二维码加入微信新生交流群，并在申请信息中填写校验码进行录取身份核验。</span>
           
+          {!verificationError ? (
           <div className="qr-container">
             <img src="/新生群二维码.png" alt="新生群二维码" className="qr-image" />
           </div>
+          ) : null}
           
           <div className="code-container">
             <span className="code-label">入群申请校验码</span>
@@ -589,7 +592,12 @@ function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; bi
                 {copied ? "已复制" : "复制"}
               </button>
             </div>
-            {verificationError ? <p className="manual-verify">{verificationError}</p> : null}
+            {verificationError ? (
+              <p className="manual-verify">
+                <Icon name="alert" />
+                <span>{verificationError}</span>
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}

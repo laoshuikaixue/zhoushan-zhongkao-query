@@ -319,28 +319,43 @@ button, input {
   width: 100%;
   height: 38px;
   margin-top: 10px;
-  border: 1px dashed var(--input-border);
+  padding: 0 14px;
+  border: 1px solid var(--tabs-border);
   border-radius: 8px;
-  background: transparent;
-  color: var(--text-muted);
+  background: var(--tabs-bg);
+  color: var(--tabs-btn);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   font-weight: 600;
   font-size: 13px;
 }
 
 .mock-submit:hover {
-  border-color: var(--input-focus);
+  border-color: var(--card-border);
   color: var(--text-primary);
-  background: var(--tabs-bg);
+  background: var(--card-bg);
 }
 
 .mock-submit svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
+}
+
+.mock-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--tabs-border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1;
 }
 
 /* --- 消息与加载状态 --- */
@@ -621,10 +636,28 @@ button, input {
 }
 
 .manual-verify {
-  margin: 2px 0 0;
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  background: var(--danger-bg);
   color: var(--danger-text);
-  font-size: 12px;
-  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.manual-verify svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--danger-text);
+}
+
+.manual-verify span {
+  text-transform: none;
 }
 
 .notice {
