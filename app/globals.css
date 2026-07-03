@@ -112,7 +112,7 @@ button, input {
   padding: 48px 16px;
 }
 
-/* --- Card Container --- */
+/* --- 卡片容器 --- */
 .query-card {
   width: min(100%, 450px);
   padding: 32px 28px;
@@ -144,7 +144,7 @@ button, input {
   color: var(--text-primary);
 }
 
-/* --- Tabs (Apple Segmented Control Style) --- */
+/* --- 分段切换按钮 --- */
 .tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -177,7 +177,7 @@ button, input {
   box-shadow: var(--tabs-btn-shadow);
 }
 
-/* --- Form Fields --- */
+/* --- 表单字段 --- */
 .query-form {
   margin-top: 0;
 }
@@ -230,7 +230,7 @@ button, input {
   color: var(--input-focus);
 }
 
-/* --- CAPTCHA --- */
+/* --- 验证码 --- */
 .captcha-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 110px;
@@ -278,7 +278,7 @@ button, input {
   color: var(--danger-text);
 }
 
-/* --- Submit Button --- */
+/* --- 提交按钮 --- */
 .submit {
   width: 100%;
   height: 42px;
@@ -315,7 +315,35 @@ button, input {
   height: 16px;
 }
 
-/* --- Message / Loading --- */
+.mock-submit {
+  width: 100%;
+  height: 38px;
+  margin-top: 10px;
+  border: 1px dashed var(--input-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.mock-submit:hover {
+  border-color: var(--input-focus);
+  color: var(--text-primary);
+  background: var(--tabs-bg);
+}
+
+.mock-submit svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* --- 消息与加载状态 --- */
 .message {
   margin-top: 20px;
   padding: 12px 14px;
@@ -353,7 +381,7 @@ button, input {
   to { transform: rotate(360deg); }
 }
 
-/* --- Result View (Strict Print Style) --- */
+/* --- 查询结果视图 --- */
 @keyframes fadeInFast {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -590,6 +618,13 @@ button, input {
 .copy-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.manual-verify {
+  margin: 2px 0 0;
+  color: var(--danger-text);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .notice {

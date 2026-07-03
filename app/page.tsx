@@ -56,6 +56,16 @@ const queryLabels: Record<QueryType, string> = {
   admission: "录取查询",
 };
 
+const isDevelopment = process.env.NODE_ENV === "development";
+
+const mockAdmissionResult: Required<AdmissionResult> = {
+  id: "2409029113001",
+  candidateName: "张三",
+  graduationSchool: "本地测试初中",
+  admittedSchools: "舟山市六横中学",
+  admittedMajors: "普通班",
+};
+
 const errorMessages: Record<string, string> = {
   "1001": "验证码错误，请重新输入",
   "9400": "验证码已过期，请重新输入",
@@ -153,6 +163,16 @@ export default function Home() {
     if (!verifyCode.trim()) return "请输入验证码";
     if (!codeToken) return "验证码已失效，请刷新验证码";
     return "";
+  }
+
+  function handleMockAdmissionResult() {
+    setQueryType("admission");
+    setAdmissionTicketNumber(mockAdmissionResult.id);
+    setBornDateStr("20080101");
+    setVerifyCode("");
+    setStatus("success");
+    setMessage("");
+    setResult(mockAdmissionResult);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -282,7 +302,6 @@ export default function Home() {
               {captchaLoading ? (
                 <Icon name="loading" />
               ) : captchaImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img src={captchaImage} alt="验证码，点击刷新" />
               ) : (
                 <Icon name="refresh" />
@@ -296,6 +315,13 @@ export default function Home() {
             {status === "loading" ? <Icon name="loading" /> : <Icon name="search" />}
             {queryType === "score" ? "查询成绩" : "查询录取结果"}
           </button>
+
+          {isDevelopment ? (
+            <button className="mock-submit" type="button" onClick={handleMockAdmissionResult}>
+              <Icon name="search" />
+              生成模拟录取结果
+            </button>
+          ) : null}
         </form>
 
         <ResultArea
@@ -480,6 +506,7 @@ function ScoreResultView({ data }: { data: ScoreResult }) {
 function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; birthDateStr: string }) {
   const isLiuheng = data.admittedSchools?.includes("舟山市六横中学") ?? false;
   const [verificationCode, setVerificationCode] = useState<string>("");
+  const [verificationError, setVerificationError] = useState("");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -489,8 +516,15 @@ function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; bi
         birthDate: birthDateStr,
         candidateName: data.candidateName,
       })
-        .then(setVerificationCode)
-        .catch((err) => console.error("Encryption failed", err));
+        .then((code) => {
+          setVerificationCode(code);
+          setVerificationError("");
+        })
+        .catch((err) => {
+          console.error("Encryption failed", err);
+          setVerificationCode("");
+          setVerificationError("校验码生成失败，请截图本页面，并添加微信 laoshuikaixue 进行人工验证。");
+        });
     }
   }, [isLiuheng, data.id, data.candidateName, birthDateStr]);
 
@@ -520,7 +554,6 @@ function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; bi
           <span className="tip-desc">请扫描下方二维码加入微信新生交流群，并在申请信息中填写校验码进行录取身份核验。</span>
           
           <div className="qr-container">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/新生群二维码.png" alt="新生群二维码" className="qr-image" />
           </div>
           
@@ -537,6 +570,7 @@ function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; bi
                 {copied ? "已复制" : "复制"}
               </button>
             </div>
+            {verificationError ? <p className="manual-verify">{verificationError}</p> : null}
           </div>
         </div>
       ) : null}

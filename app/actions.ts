@@ -8,6 +8,9 @@ type AdmissionVerificationPayload = {
   candidateName?: string;
 };
 
+const CJK_BASE = 0x4e00;
+const CJK_END = 0x9fff;
+
 function packDigits(value: string, digits: number) {
   if (!new RegExp(`^\\d{${digits}}$`).test(value)) {
     throw new Error(`Expected ${digits} digits`);
@@ -18,6 +21,48 @@ function packDigits(value: string, digits: number) {
     bytes[i / 2] = (Number(value[i]) << 4) | Number(value[i + 1]);
   }
   return bytes;
+}
+
+function packChineseName(name: string) {
+  const chars = Array.from(name.trim());
+  if (chars.length > 4) {
+    throw new Error("Candidate name must be 4 Chinese characters or fewer");
+  }
+
+  let bits = 0n;
+  let bitLength = 0;
+  for (const char of chars) {
+    const codePoint = char.codePointAt(0);
+    if (codePoint === undefined || codePoint < CJK_BASE || codePoint > CJK_END) {
+      throw new Error("Candidate name contains unsupported characters");
+    }
+    bits = (bits << 15n) | BigInt(codePoint - CJK_BASE);
+    bitLength += 15;
+  }
+
+  bits <<= BigInt(64 - bitLength);
+  const bytes = Buffer.alloc(8);
+  for (let i = 7; i >= 0; i -= 1) {
+    bytes[i] = Number(bits & 0xffn);
+    bits >>= 8n;
+  }
+
+  return {
+    length: chars.length,
+    bytes,
+  };
+}
+
+function base64UrlEncode(value: Buffer) {
+  return value.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function hmac(secretKey: string, ...values: Buffer[]) {
+  const digest = crypto.createHmac("sha256", secretKey);
+  for (const value of values) {
+    digest.update(value);
+  }
+  return digest.digest();
 }
 
 export async function encryptAdmissionData({
@@ -34,23 +79,20 @@ export async function encryptAdmissionData({
 
   const secretKey = process.env.ENCRYPTION_KEY || "default_super_secret_key_12345";
 
-  // Create 32-byte key using SHA-256 from secret key
+  // 使用密钥的 SHA-256 摘要生成 32 字节 AES 密钥。
   const key = crypto.createHash("sha256").update(secretKey).digest();
+  const name = packChineseName(candidateName);
 
-  const block = Buffer.alloc(16);
-  block[0] = 1;
-  block[1] = ticket.length;
-  packDigits(ticket.padStart(14, "0"), 14).copy(block, 2);
-  packDigits(birthDate, 8).copy(block, 9);
-  crypto
-    .createHmac("sha256", secretKey)
-    .update(candidateName.trim())
-    .digest()
-    .copy(block, 13, 0, 3);
+  const payload = Buffer.alloc(20);
+  payload[0] = (3 << 4) | (ticket.length === 14 ? 0b1000 : 0) | name.length;
+  packDigits(ticket.padStart(14, "0"), 14).copy(payload, 1);
+  packDigits(birthDate, 8).copy(payload, 8);
+  name.bytes.copy(payload, 12);
 
-  // AES-256-ECB with a fixed 16-byte binary payload keeps Base64 output at 24 chars.
-  const cipher = crypto.createCipheriv("aes-256-ecb", key, null);
-  cipher.setAutoPadding(false);
+  const nonce = hmac(secretKey, Buffer.from("admission-v3-nonce"), payload).subarray(0, 2);
+  const iv = hmac(secretKey, Buffer.from("admission-v3-iv"), nonce).subarray(0, 16);
+  const cipher = crypto.createCipheriv("aes-256-ctr", key, iv);
+  const ciphertext = Buffer.concat([cipher.update(payload), cipher.final()]);
 
-  return Buffer.concat([cipher.update(block), cipher.final()]).toString("base64");
+  return base64UrlEncode(Buffer.concat([nonce, ciphertext]));
 }
