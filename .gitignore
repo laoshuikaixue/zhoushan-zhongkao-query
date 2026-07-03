@@ -28,3 +28,5 @@ Thumbs.db
 # codex/local temporary files
 .codex/
 .agents/
+
+tsconfig.tsbuildinfo

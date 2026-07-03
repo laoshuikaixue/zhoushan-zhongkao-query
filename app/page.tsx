@@ -1,19 +1,7 @@
 "use client";
 
-import {
-  AlertCircle,
-  BadgeCheck,
-  CalendarDays,
-  GraduationCap,
-  Loader2,
-  RefreshCw,
-  School,
-  Search,
-  ShieldCheck,
-  Ticket,
-  Trophy,
-} from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type QueryType = "score" | "admission";
 type Status = "idle" | "loading" | "success" | "error";
@@ -55,18 +43,25 @@ type UpstreamQueryResponse = {
   data?: ScoreResult | AdmissionResult | null;
 };
 
-const queryTabs: Array<{ type: QueryType; label: string; helper: string }> = [
-  {
-    type: "score",
-    label: "成绩查询",
-    helper: "查看总分、区域排名、科目成绩和综合素质。",
-  },
-  {
-    type: "admission",
-    label: "录取查询",
-    helper: "查看录取学校、专业和毕业学校信息。",
-  },
-];
+const upstreamBase = "https://xzzs.zsedus.cn:1443/yixiu";
+
+const queryEndpoints: Record<QueryType, string> = {
+  score: "queryScore",
+  admission: "admissionQuery",
+};
+
+const queryLabels: Record<QueryType, string> = {
+  score: "成绩查询",
+  admission: "录取查询",
+};
+
+const errorMessages: Record<string, string> = {
+  "1001": "验证码错误，请重新输入",
+  "9400": "验证码已过期，请重新输入",
+  ERROR_CODE: "网络错误，请稍后重试",
+  ECONNABORTED: "请求超时，请稍后重试",
+  ERR_NETWORK: "网络错误，请稍后重试",
+};
 
 const scoreFields = [
   ["语文", "chineseLanguageScore"],
@@ -83,31 +78,12 @@ const qualityFields = [
   ["创新实践", "innovativePractice"],
 ] as const;
 
-const upstreamBase = "https://xzzs.zsedus.cn:1443/yixiu";
-
-const queryEndpoints: Record<QueryType, string> = {
-  score: "queryScore",
-  admission: "admissionQuery",
-};
-
-const errorMessages: Record<string, string> = {
-  "1001": "验证码错误，请重新输入",
-  "9400": "验证码已过期，请重新输入",
-  ERROR_CODE: "网络错误，请稍后重试",
-  ECONNABORTED: "请求超时，请稍后重试",
-  ERR_NETWORK: "网络错误，请稍后重试",
-};
-
-function normalizeDigits(value: string, maxLength: number) {
+function onlyDigits(value: string, maxLength: number) {
   return value.replace(/\D/g, "").slice(0, maxLength);
 }
 
-function displayValue(value: string | number | undefined) {
-  if (value === undefined || value === null || value === "") {
-    return "暂无";
-  }
-
-  return value;
+function show(value: string | number | undefined) {
+  return value === undefined || value === null || value === "" ? "暂无" : value;
 }
 
 export default function Home() {
@@ -122,11 +98,6 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<ScoreResult | AdmissionResult | null>(null);
-
-  const activeTab = useMemo(
-    () => queryTabs.find((tab) => tab.type === queryType) ?? queryTabs[0],
-    [queryType],
-  );
 
   const loadCaptcha = useCallback(async () => {
     setCaptchaLoading(true);
@@ -144,12 +115,7 @@ export default function Home() {
       });
       const data = (await response.json()) as UpstreamCaptchaResponse;
 
-      if (
-        !response.ok ||
-        data.code !== "0000" ||
-        !data.data?.img ||
-        !data.data?.codeToken
-      ) {
+      if (!response.ok || data.code !== "0000" || !data.data?.img || !data.data?.codeToken) {
         throw new Error("验证码获取失败");
       }
 
@@ -173,23 +139,18 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [loadCaptcha]);
 
+  function switchType(type: QueryType) {
+    setQueryType(type);
+    setStatus("idle");
+    setMessage("");
+    setResult(null);
+  }
+
   function validateForm() {
-    if (!/^\d{13,14}$/.test(admissionTicketNumber)) {
-      return "请输入 13-14 位准考证号";
-    }
-
-    if (!/^\d{8}$/.test(bornDateStr)) {
-      return "请输入 8 位出生年月日";
-    }
-
-    if (!verifyCode.trim()) {
-      return "请输入验证码";
-    }
-
-    if (!codeToken) {
-      return "验证码已失效，请刷新验证码";
-    }
-
+    if (!/^\d{13,14}$/.test(admissionTicketNumber)) return "请输入 13-14 位准考证号";
+    if (!/^\d{8}$/.test(bornDateStr)) return "请输入 8 位出生年月日";
+    if (!verifyCode.trim()) return "请输入验证码";
+    if (!codeToken) return "验证码已失效，请刷新验证码";
     return "";
   }
 
@@ -239,7 +200,7 @@ export default function Home() {
 
       if (data.code === "0000" && data.data) {
         setStatus("success");
-        setMessage("查询成功");
+        setMessage("");
         setResult(data.data);
         return;
       }
@@ -249,9 +210,7 @@ export default function Home() {
       setMessage(errorMessages[errorCode] ?? "未查询到相关数据");
       setResult(null);
 
-      if (errorCode === "1001" || errorCode === "9400") {
-        void loadCaptcha();
-      }
+      if (errorCode === "1001" || errorCode === "9400") void loadCaptcha();
     } catch {
       setStatus("error");
       setMessage("网络错误，请稍后重试");
@@ -260,329 +219,309 @@ export default function Home() {
     }
   }
 
-  function selectType(type: QueryType) {
-    setQueryType(type);
-    setStatus("idle");
-    setMessage("");
-    setResult(null);
-  }
-
   return (
-    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-6xl flex-col justify-center gap-5">
-        <header className="flex flex-col gap-4 rounded-lg border border-white/70 bg-white/70 p-4 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm font-medium text-teal-700">舟山市中考查询</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
-              成绩与录取结果统一查询
-            </h1>
-          </div>
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-            <ShieldCheck className="h-4 w-4 text-teal-700" aria-hidden="true" />
-            不保存查询信息
-          </div>
-        </header>
+    <main className="site-shell">
+      <section className="query-card">
+        <div className="title-block">
+          <p className="brand">LaoShui · 舟山中考</p>
+          <h1>{queryLabels[queryType]}</h1>
+        </div>
 
-        <section className="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <form
-            onSubmit={handleSubmit}
-            className="rounded-lg border border-white/80 bg-white/85 p-4 shadow-sm backdrop-blur sm:p-5"
-          >
-            <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
-              {queryTabs.map((tab) => {
-                const selected = tab.type === queryType;
-                return (
-                  <button
-                    key={tab.type}
-                    type="button"
-                    onClick={() => selectType(tab.type)}
-                    className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                      selected
-                        ? "bg-slate-950 text-white shadow-sm"
-                        : "text-slate-600 hover:bg-white hover:text-slate-950"
-                    }`}
-                    aria-pressed={selected}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <p className="mt-3 text-sm leading-6 text-slate-600">{activeTab.helper}</p>
-
-            <div className="mt-5 space-y-4">
-              <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-800">
-                  <Ticket className="h-4 w-4 text-teal-700" aria-hidden="true" />
-                  准考证号
-                </span>
-                <input
-                  value={admissionTicketNumber}
-                  onChange={(event) =>
-                    setAdmissionTicketNumber(normalizeDigits(event.target.value, 14))
-                  }
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="如 2409029113001"
-                  aria-label="准考证号，13 到 14 位数字"
-                  className="h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-800">
-                  <CalendarDays className="h-4 w-4 text-teal-700" aria-hidden="true" />
-                  出生年月日
-                </span>
-                <input
-                  value={bornDateStr}
-                  onChange={(event) => setBornDateStr(normalizeDigits(event.target.value, 8))}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="如 20080101"
-                  className="h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10"
-                />
-              </label>
-
-              <div>
-                <label
-                  htmlFor="verifyCode"
-                  className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-800"
-                >
-                  <BadgeCheck className="h-4 w-4 text-teal-700" aria-hidden="true" />
-                  验证码
-                </label>
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                  <input
-                    id="verifyCode"
-                    value={verifyCode}
-                    onChange={(event) => setVerifyCode(event.target.value.trim().toUpperCase())}
-                    autoComplete="off"
-                    placeholder="输入右侧验证码"
-                    className="h-12 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-base text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-teal-700 focus:ring-4 focus:ring-teal-700/10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void loadCaptcha()}
-                    disabled={captchaLoading}
-                    className="flex h-12 w-[132px] items-center justify-center overflow-hidden rounded-md border border-slate-300 bg-white text-sm text-slate-600 transition hover:border-teal-700 disabled:cursor-wait disabled:opacity-70"
-                    title="刷新验证码"
-                  >
-                    {captchaLoading ? (
-                      <Loader2 className="h-5 w-5 animate-spin text-teal-700" aria-hidden="true" />
-                    ) : captchaImage ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={captchaImage} alt="验证码，点击刷新" className="h-full w-full object-cover" />
-                    ) : (
-                      <RefreshCw className="h-5 w-5" aria-hidden="true" />
-                    )}
-                  </button>
-                </div>
-                {captchaError ? (
-                  <p className="mt-2 text-sm text-red-700">{captchaError}</p>
-                ) : (
-                  <p className="mt-2 text-sm text-slate-500">看不清可点击图片刷新。</p>
-                )}
-              </div>
-            </div>
-
+        <div className="tabs" aria-label="选择查询类型">
+          {(["score", "admission"] as QueryType[]).map((type) => (
             <button
-              type="submit"
-              disabled={status === "loading" || captchaLoading}
-              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-base font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              key={type}
+              type="button"
+              className={queryType === type ? "active" : ""}
+              onClick={() => switchType(type)}
             >
-              {status === "loading" ? (
-                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-              ) : (
-                <Search className="h-5 w-5" aria-hidden="true" />
-              )}
-              {queryType === "score" ? "查询成绩" : "查询录取结果"}
+              {queryLabels[type]}
             </button>
-          </form>
+          ))}
+        </div>
 
-          <ResultPanel
-            queryType={queryType}
-            status={status}
-            message={message}
-            result={result}
-          />
-        </section>
+        <form className="query-form" onSubmit={handleSubmit}>
+          <FieldIcon icon="ticket">
+            <input
+              value={admissionTicketNumber}
+              onChange={(event) => setAdmissionTicketNumber(onlyDigits(event.target.value, 14))}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="准考证号（如 2409029113001）"
+              aria-label="准考证号"
+            />
+          </FieldIcon>
 
-        <footer className="rounded-lg border border-slate-200/80 bg-white/70 px-4 py-3 text-sm leading-6 text-slate-600 backdrop-blur">
-          查询结果仅供参考，最终结果以官方成绩单和录取通知书为准。数据来源为舟山市教育局公开查询接口。
-        </footer>
-      </div>
+          <FieldIcon icon="date">
+            <input
+              value={bornDateStr}
+              onChange={(event) => setBornDateStr(onlyDigits(event.target.value, 8))}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="出生年月日（如 20080101）"
+              aria-label="出生年月日"
+            />
+          </FieldIcon>
+
+          <div className="captcha-row">
+            <FieldIcon icon="check">
+              <input
+                value={verifyCode}
+                onChange={(event) => setVerifyCode(event.target.value.trim().toUpperCase())}
+                autoComplete="off"
+                placeholder="验证码"
+                aria-label="验证码"
+              />
+            </FieldIcon>
+            <button
+              type="button"
+              className="captcha"
+              onClick={() => void loadCaptcha()}
+              disabled={captchaLoading}
+              title="刷新验证码"
+            >
+              {captchaLoading ? (
+                <Icon name="loading" />
+              ) : captchaImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={captchaImage} alt="验证码，点击刷新" />
+              ) : (
+                <Icon name="refresh" />
+              )}
+            </button>
+          </div>
+
+          {captchaError ? <p className="hint error">{captchaError}</p> : <p className="hint">看不清验证码可以点击图片刷新</p>}
+
+          <button className="submit" type="submit" disabled={status === "loading" || captchaLoading}>
+            {status === "loading" ? <Icon name="loading" /> : <Icon name="search" />}
+            {queryType === "score" ? "查询成绩" : "查询录取结果"}
+          </button>
+        </form>
+
+        <ResultArea status={status} message={message} queryType={queryType} result={result} />
+
+        <p className="notice">查询结果仅供参考，最终以官方成绩单和录取通知书为准。</p>
+      </section>
     </main>
   );
 }
 
-function ResultPanel({
-  queryType,
-  status,
-  message,
-  result,
+function FieldIcon({
+  icon,
+  children,
 }: {
-  queryType: QueryType;
-  status: Status;
-  message: string;
-  result: ScoreResult | AdmissionResult | null;
+  icon: IconName;
+  children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-white/80 bg-white/85 p-4 shadow-sm backdrop-blur sm:p-5">
-      <div className="flex items-start justify-between gap-4">
+    <label className="field">
+      <span>
+        <Icon name={icon} />
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function ResultArea({
+  status,
+  message,
+  queryType,
+  result,
+}: {
+  status: Status;
+  message: string;
+  queryType: QueryType;
+  result: ScoreResult | AdmissionResult | null;
+}) {
+  if (status === "idle") return null;
+
+  if (status === "loading" || status === "error") {
+    return (
+      <div className={`message ${status}`}>
+        {status === "error" ? <Icon name="alert" /> : <Icon name="loading" />}
+        <span>{message}</span>
+      </div>
+    );
+  }
+
+  if (!result) return null;
+
+  return queryType === "score" ? (
+    <ScoreResultView data={result as ScoreResult} />
+  ) : (
+    <AdmissionResultView data={result as AdmissionResult} />
+  );
+}
+
+type IconName = "ticket" | "date" | "check" | "search" | "refresh" | "loading" | "alert";
+
+function Icon({ name }: { name: IconName }) {
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+
+  if (name === "ticket") {
+    return (
+      <svg {...common}>
+        <path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4Z" />
+        <path d="M13 6v2" />
+        <path d="M13 16v2" />
+        <path d="M13 11v2" />
+      </svg>
+    );
+  }
+
+  if (name === "date") {
+    return (
+      <svg {...common}>
+        <path d="M8 2v4" />
+        <path d="M16 2v4" />
+        <rect x="3" y="4" width="18" height="18" rx="3" />
+        <path d="M3 10h18" />
+      </svg>
+    );
+  }
+
+  if (name === "check") {
+    return (
+      <svg {...common}>
+        <path d="M9 12l2 2 4-5" />
+        <circle cx="12" cy="12" r="9" />
+      </svg>
+    );
+  }
+
+  if (name === "search") {
+    return (
+      <svg {...common}>
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </svg>
+    );
+  }
+
+  if (name === "refresh") {
+    return (
+      <svg {...common}>
+        <path d="M20 12a8 8 0 0 1-13.66 5.66" />
+        <path d="M4 12A8 8 0 0 1 17.66 6.34" />
+        <path d="M17 2v5h-5" />
+        <path d="M7 22v-5h5" />
+      </svg>
+    );
+  }
+
+  if (name === "alert") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v5" />
+        <path d="M12 16h.01" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...common} className="spin">
+      <path d="M21 12a9 9 0 0 1-9 9" />
+      <path d="M3 12a9 9 0 0 1 9-9" />
+    </svg>
+  );
+}
+
+function ScoreResultView({ data }: { data: ScoreResult }) {
+  return (
+    <section className="result">
+      <div className="result-head">
         <div>
-          <p className="text-sm font-medium text-teal-700">查询结果</p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-950">
-            {queryType === "score" ? "成绩信息" : "录取信息"}
-          </h2>
+          <span>考生</span>
+          <strong>{show(data.candidateName)}</strong>
         </div>
-        <div className="rounded-md bg-slate-100 p-2 text-slate-700">
-          {queryType === "score" ? (
-            <Trophy className="h-5 w-5" aria-hidden="true" />
-          ) : (
-            <School className="h-5 w-5" aria-hidden="true" />
-          )}
+        <div>
+          <span>准考证号</span>
+          <strong>{show(data.admissionTicketNumber)}</strong>
         </div>
       </div>
 
-      <div className="mt-5">
-        {status === "idle" && <EmptyState queryType={queryType} />}
-        {status === "loading" && <MessageState tone="loading" message={message} />}
-        {status === "error" && <MessageState tone="error" message={message} />}
-        {status === "success" && queryType === "score" && result && (
-          <ScoreView data={result as ScoreResult} />
-        )}
-        {status === "success" && queryType === "admission" && result && (
-          <AdmissionView data={result as AdmissionResult} />
-        )}
+      <div className="score-main">
+        <div>
+          <span>总分</span>
+          <strong>{show(data.totalScore)}</strong>
+        </div>
+        <div>
+          <span>区域排名</span>
+          <strong>{show(data.regionalRanking)}</strong>
+        </div>
       </div>
+
+      <ResultGrid title="考试成绩" items={scoreFields.map(([label, key]) => [label, show(data[key])])} />
+      <ResultGrid title="综合素质" items={qualityFields.map(([label, key]) => [label, show(data[key])])} />
     </section>
   );
 }
 
-function EmptyState({ queryType }: { queryType: QueryType }) {
-  return (
-    <div className="flex min-h-[360px] flex-col justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-5 text-center">
-      <GraduationCap className="mx-auto h-10 w-10 text-teal-700" aria-hidden="true" />
-      <h3 className="mt-4 text-lg font-semibold text-slate-950">
-        {queryType === "score" ? "输入信息后查询成绩" : "输入信息后查询录取结果"}
-      </h3>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-600">
-        准考证号、出生年月日和验证码只用于本次查询，不会在本地持久化保存。
-      </p>
-    </div>
-  );
-}
-
-function MessageState({ tone, message }: { tone: "loading" | "error"; message: string }) {
-  const isLoading = tone === "loading";
-
-  return (
-    <div
-      className={`flex min-h-[360px] flex-col justify-center rounded-lg border p-5 text-center ${
-        isLoading
-          ? "border-teal-200 bg-teal-50 text-teal-900"
-          : "border-red-200 bg-red-50 text-red-900"
-      }`}
-      role={isLoading ? "status" : "alert"}
-    >
-      {isLoading ? (
-        <Loader2 className="mx-auto h-9 w-9 animate-spin" aria-hidden="true" />
-      ) : (
-        <AlertCircle className="mx-auto h-9 w-9" aria-hidden="true" />
-      )}
-      <h3 className="mt-4 text-lg font-semibold">{isLoading ? "请稍候" : "查询未完成"}</h3>
-      <p className="mt-2 text-sm leading-6">{message}</p>
-    </div>
-  );
-}
-
-function ScoreView({ data }: { data: ScoreResult }) {
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Metric label="考生姓名" value={displayValue(data.candidateName)} />
-        <Metric label="准考证号" value={displayValue(data.admissionTicketNumber)} />
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Metric label="总分" value={displayValue(data.totalScore)} highlight />
-        <Metric label="区域排名" value={displayValue(data.regionalRanking)} />
-      </div>
-
-      <div>
-        <h3 className="mb-2 text-sm font-semibold text-slate-800">考试成绩</h3>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {scoreFields.map(([label, key]) => (
-            <Metric key={key} label={label} value={displayValue(data[key])} compact />
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <h3 className="mb-2 text-sm font-semibold text-slate-800">综合素质</h3>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {qualityFields.map(([label, key]) => (
-            <Metric key={key} label={label} value={displayValue(data[key])} compact />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdmissionView({ data }: { data: AdmissionResult }) {
+function AdmissionResultView({ data }: { data: AdmissionResult }) {
   const isLiuheng = data.admittedSchools?.includes("舟山市六横中学") ?? false;
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Metric label="考生姓名" value={displayValue(data.candidateName)} />
-        <Metric label="准考证号" value={displayValue(data.id)} />
+    <section className="result">
+      <div className="result-list">
+        <ResultLine label="考生姓名" value={show(data.candidateName)} />
+        <ResultLine label="准考证号" value={show(data.id)} />
+        <ResultLine label="毕业学校" value={show(data.graduationSchool)} />
+        <ResultLine label="录取学校" value={show(data.admittedSchools)} strong />
+        <ResultLine label="录取专业" value={show(data.admittedMajors)} />
       </div>
 
-      <Metric label="毕业学校" value={displayValue(data.graduationSchool)} />
-      <Metric label="录取学校" value={displayValue(data.admittedSchools)} highlight />
-      <Metric label="录取专业" value={displayValue(data.admittedMajors)} />
-
       {isLiuheng ? (
-        <div className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm leading-6 text-teal-950">
-          <p className="font-semibold">已录取到舟山市六横中学</p>
-          <p className="mt-1">
-            添加微信 <span className="font-semibold">laoshuikaixue</span>，通过后发送本页面截图加入新生交流群。
-          </p>
+        <div className="school-tip">
+          <strong>已录取到舟山市六横中学</strong>
+          <span>添加微信 laoshuikaixue，通过后发送此页面截图加入新生交流群。</span>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function ResultGrid({ title, items }: { title: string; items: Array<[string, string | number]> }) {
+  return (
+    <div className="result-section">
+      <h2>{title}</h2>
+      <div className="mini-grid">
+        {items.map(([label, value]) => (
+          <div key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function Metric({
+function ResultLine({
   label,
   value,
-  highlight = false,
-  compact = false,
+  strong = false,
 }: {
   label: string;
   value: string | number;
-  highlight?: boolean;
-  compact?: boolean;
+  strong?: boolean;
 }) {
   return (
-    <div
-      className={`rounded-lg border p-3 ${
-        highlight ? "border-teal-200 bg-teal-50" : "border-slate-200 bg-white"
-      } ${compact ? "min-h-20" : ""}`}
-    >
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p
-        className={`mt-1 break-words font-semibold ${
-          highlight ? "text-2xl text-teal-900" : "text-base text-slate-950"
-        }`}
-      >
-        {value}
-      </p>
-    </div>
+    <p>
+      <span>{label}</span>
+      <strong className={strong ? "accent" : ""}>{value}</strong>
+    </p>
   );
 }
