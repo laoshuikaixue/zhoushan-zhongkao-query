@@ -580,7 +580,7 @@ function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; bi
           ) : null}
           
           <div className="code-container">
-            <span className="code-label">入群申请校验码</span>
+            <span className="code-label">入群申请校验码（注意不要告诉任何人）</span>
             <div className="code-row">
               <code className="code-value">{verificationCode || "正在生成校验码..."}</code>
               <button 
