@@ -571,7 +571,7 @@ function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; bi
       {isLiuheng ? (
         <div className="school-tip">
           <strong>已录取到舟山市六横中学 🎉</strong>
-          <span className="tip-desc">请扫描下方二维码加入微信新生交流群，并在申请信息中填写校验码进行录取身份核验。</span>
+          <span className="tip-desc">请扫描下方二维码加入微信新生交流群，并在申请信息中填写校验码进行录取身份核验（我还在上学，回来通过）。</span>
           
           {!verificationError ? (
           <div className="qr-container">
