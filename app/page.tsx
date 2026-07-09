@@ -535,7 +535,6 @@ function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; bi
         ticket: data.id,
         birthDate: birthDateStr,
         candidateName: data.candidateName,
-        graduationSchool: data.graduationSchool,
       })
         .then((code) => {
           setVerificationCode(code);

@@ -15,15 +15,18 @@ except ImportError:
 
 CJK_BASE = 0x4E00
 
+
 def base64url_decode(value):
     padding = "=" * ((4 - len(value) % 4) % 4)
     return base64.urlsafe_b64decode(value + padding)
+
 
 def hmac_digest(secret_key, *values):
     digest = hmac.new(secret_key.encode('utf-8'), digestmod=hashlib.sha256)
     for value in values:
         digest.update(value)
     return digest.digest()
+
 
 def unpack_digits(data):
     digits = []
@@ -36,6 +39,7 @@ def unpack_digits(data):
         digits.append(str(low))
     return "".join(digits)
 
+
 def unpack_chinese_name(data, name_len):
     bits = int.from_bytes(data, byteorder="big")
     total_bits = len(data) * 8
@@ -46,49 +50,13 @@ def unpack_chinese_name(data, name_len):
         chars.append(chr(CJK_BASE + value))
     return "".join(chars)
 
+
 def decrypt_code(encrypted_str, secret_key):
     try:
         # 使用密钥的 SHA-256 摘要生成 32 字节 AES 密钥。
         key = hashlib.sha256(secret_key.encode('utf-8')).digest()
 
         compact_data = base64url_decode(encrypted_str)
-
-        if len(compact_data) == 42:
-            nonce = compact_data[:2]
-            ciphertext = compact_data[2:]
-            iv = hmac_digest(secret_key, b"admission-v5-iv", nonce)[:16]
-
-            cipher = Cipher(algorithms.AES(key), modes.CTR(iv), backend=default_backend())
-            decryptor = cipher.decryptor()
-            payload = decryptor.update(ciphertext) + decryptor.finalize()
-
-            expected_nonce = hmac_digest(secret_key, b"admission-v5-nonce", payload)[:2]
-            if not hmac.compare_digest(nonce, expected_nonce):
-                raise ValueError("Invalid checksum")
-
-            meta = payload[0]
-            if meta >> 4 != 5:
-                raise ValueError("Invalid compact format")
-            name_len = meta & 0b111
-            school_len = payload[1]
-            if name_len > 6 or school_len > 8:
-                raise ValueError("Invalid field length")
-
-            ticket_len = 14 if meta & 0b1000 else 13
-            ticket = unpack_digits(payload[2:9])[-ticket_len:]
-            birth_date = unpack_digits(payload[9:13])
-            name = unpack_chinese_name(payload[13:25], name_len)
-            school = unpack_chinese_name(payload[25:40], school_len)
-
-            return {
-                "ok": True,
-                "format": "v5",
-                "ticket": ticket,
-                "birth_date": birth_date,
-                "name": name,
-                "school": school,
-                "name_hash": None,
-            }
 
         if len(compact_data) == 26:
             nonce = compact_data[:2]
@@ -182,13 +150,13 @@ def decrypt_code(encrypted_str, secret_key):
                 "name": None,
                 "name_hash": name_hash,
             }
-        
+
         # 旧版格式：去掉 PKCS7 填充，仅返回准考证号。
         padding_len = decrypted[-1]
         if padding_len < 1 or padding_len > 16:
             raise ValueError("Invalid padding")
         ticket = decrypted[:-padding_len].decode('utf-8')
-        
+
         return {
             "ok": True,
             "format": "legacy",
@@ -202,6 +170,7 @@ def decrypt_code(encrypted_str, secret_key):
             "ok": False,
             "error": str(e),
         }
+
 
 def main():
     # 优先从环境变量读取密钥。
@@ -218,14 +187,14 @@ def main():
     print("==========================================")
     print(f"当前加密方式: AES-256-CTR 紧凑码 / AES-256-ECB 兼容")
     print(f"当前秘钥前缀: {secret_key[:3]}***")
-    
+
     while True:
         code = input("\n请输入入群校验码 (输入 q 退出): ").strip()
         if code.lower() == 'q':
             break
         if not code:
             continue
-            
+
         result = decrypt_code(code, secret_key)
 
         print("\n------------------------------------------")
@@ -238,8 +207,6 @@ def main():
                 print(f"考生姓名: {result['name']}")
             elif result.get("name_hash"):
                 print(f"姓名核验指纹: {result['name_hash']}")
-            if result.get("school"):
-                print(f"毕业学校: {result['school']}")
             ticket = result["ticket"]
             birth_date = result.get("birth_date", "")
             if birth_date:
@@ -249,6 +216,7 @@ def main():
             if result["format"] == "legacy":
                 print("[注意] 这是旧版校验码，仅包含准考证号。")
         print("------------------------------------------")
+
 
 if __name__ == "__main__":
     main()
