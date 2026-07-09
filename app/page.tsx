@@ -571,16 +571,16 @@ function AdmissionResultView({ data, birthDateStr }: { data: AdmissionResult; bi
       {isLiuheng ? (
         <div className="school-tip">
           <strong>已录取到舟山市六横中学 🎉</strong>
-          <span className="tip-desc">请扫描下方二维码加入微信新生交流群，并在申请信息中填写校验码进行录取身份核验（我还在上学，回来通过）。</span>
-          
+          <span className="tip-desc">请添加微信 <strong>laoshuikaixue</strong> 加入新生交流群，通过后请发送校验码进行录取身份核验。</span>
+
           {!verificationError ? (
           <div className="qr-container">
-            <img src="/新生群二维码.png" alt="新生群二维码" className="qr-image" />
+            <img src="/qrcode.jpg" alt="微信二维码" className="qr-image" />
           </div>
           ) : null}
-          
+
           <div className="code-container">
-            <span className="code-label">入群申请校验码（注意不要告诉任何人）</span>
+            <span className="code-label">添加通过后发送此校验码（注意不要告诉任何人）</span>
             <div className="code-row">
               <code className="code-value">{verificationCode || "正在生成校验码..."}</code>
               <button 

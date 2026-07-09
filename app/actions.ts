@@ -25,8 +25,8 @@ function packDigits(value: string, digits: number) {
 
 function packChineseName(name: string) {
   const chars = Array.from(name.trim());
-  if (chars.length > 4) {
-    throw new Error("Candidate name must be 4 Chinese characters or fewer");
+  if (chars.length > 6) {
+    throw new Error("Candidate name must be 6 Chinese characters or fewer");
   }
 
   let bits = BigInt(0);
@@ -40,9 +40,9 @@ function packChineseName(name: string) {
     bitLength += 15;
   }
 
-  bits <<= BigInt(64 - bitLength);
-  const bytes = Buffer.alloc(8);
-  for (let i = 7; i >= 0; i -= 1) {
+  bits <<= BigInt(96 - bitLength);
+  const bytes = Buffer.alloc(12);
+  for (let i = 11; i >= 0; i -= 1) {
     bytes[i] = Number(bits & BigInt(0xff));
     bits >>= BigInt(8);
   }
@@ -87,14 +87,14 @@ export async function encryptAdmissionData({
   const key = crypto.createHash("sha256").update(secretKey).digest();
   const name = packChineseName(candidateName);
 
-  const payload = Buffer.alloc(20);
-  payload[0] = (3 << 4) | (ticket.length === 14 ? 0b1000 : 0) | name.length;
+  const payload = Buffer.alloc(24);
+  payload[0] = (4 << 4) | (ticket.length === 14 ? 0b1000 : 0) | name.length;
   packDigits(ticket.padStart(14, "0"), 14).copy(payload, 1);
   packDigits(birthDate, 8).copy(payload, 8);
   name.bytes.copy(payload, 12);
 
-  const nonce = hmac(secretKey, Buffer.from("admission-v3-nonce"), payload).subarray(0, 2);
-  const iv = hmac(secretKey, Buffer.from("admission-v3-iv"), nonce).subarray(0, 16);
+  const nonce = hmac(secretKey, Buffer.from("admission-v4-nonce"), payload).subarray(0, 2);
+  const iv = hmac(secretKey, Buffer.from("admission-v4-iv"), nonce).subarray(0, 16);
   const cipher = crypto.createCipheriv("aes-256-ctr", key, iv);
   const ciphertext = Buffer.concat([cipher.update(payload), cipher.final()]);
 

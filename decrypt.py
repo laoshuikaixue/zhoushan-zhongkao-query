@@ -38,9 +38,10 @@ def unpack_digits(data):
 
 def unpack_chinese_name(data, name_len):
     bits = int.from_bytes(data, byteorder="big")
+    total_bits = len(data) * 8
     chars = []
     for index in range(name_len):
-        shift = 64 - 15 * (index + 1)
+        shift = total_bits - 15 * (index + 1)
         value = (bits >> shift) & 0x7FFF
         chars.append(chr(CJK_BASE + value))
     return "".join(chars)
@@ -51,6 +52,41 @@ def decrypt_code(encrypted_str, secret_key):
         key = hashlib.sha256(secret_key.encode('utf-8')).digest()
 
         compact_data = base64url_decode(encrypted_str)
+
+        if len(compact_data) == 26:
+            nonce = compact_data[:2]
+            ciphertext = compact_data[2:]
+            iv = hmac_digest(secret_key, b"admission-v4-iv", nonce)[:16]
+
+            cipher = Cipher(algorithms.AES(key), modes.CTR(iv), backend=default_backend())
+            decryptor = cipher.decryptor()
+            payload = decryptor.update(ciphertext) + decryptor.finalize()
+
+            expected_nonce = hmac_digest(secret_key, b"admission-v4-nonce", payload)[:2]
+            if not hmac.compare_digest(nonce, expected_nonce):
+                raise ValueError("Invalid checksum")
+
+            meta = payload[0]
+            if meta >> 4 != 4:
+                raise ValueError("Invalid compact format")
+            name_len = meta & 0b111
+            if name_len > 6:
+                raise ValueError("Invalid name length")
+
+            ticket_len = 14 if meta & 0b1000 else 13
+            ticket = unpack_digits(payload[1:8])[-ticket_len:]
+            birth_date = unpack_digits(payload[8:12])
+            name = unpack_chinese_name(payload[12:24], name_len)
+
+            return {
+                "ok": True,
+                "format": "v4",
+                "ticket": ticket,
+                "birth_date": birth_date,
+                "name": name,
+                "name_hash": None,
+            }
+
         if len(compact_data) == 22:
             nonce = compact_data[:2]
             ciphertext = compact_data[2:]
@@ -154,22 +190,24 @@ def main():
             continue
             
         result = decrypt_code(code, secret_key)
-        
+
         print("\n------------------------------------------")
         if not result["ok"]:
             print(f"[失败] 解密失败！")
             print(f"原因: 请确认校验码输入完整，或解密秘钥是否与线上系统一致。")
         else:
-            ticket = result["ticket"]
             print(f"[成功] 解密成功！")
-            print(f"解密出准考证号: {ticket}")
-            if result["format"] == "v3":
-                print(f"解密出出生年月日: {result['birth_date']}")
-                print(f"解密出考生姓名: {result['name']}")
-            elif result["format"] == "v2":
-                print(f"解密出出生年月日: {result['birth_date']}")
+            if result.get("name"):
+                print(f"考生姓名: {result['name']}")
+            elif result.get("name_hash"):
                 print(f"姓名核验指纹: {result['name_hash']}")
+            ticket = result["ticket"]
+            birth_date = result.get("birth_date", "")
+            if birth_date:
+                print(f"{ticket} {birth_date}")
             else:
+                print(ticket)
+            if result["format"] == "legacy":
                 print("[注意] 这是旧版校验码，仅包含准考证号。")
         print("------------------------------------------")
 
