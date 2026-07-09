@@ -53,6 +53,43 @@ def decrypt_code(encrypted_str, secret_key):
 
         compact_data = base64url_decode(encrypted_str)
 
+        if len(compact_data) == 42:
+            nonce = compact_data[:2]
+            ciphertext = compact_data[2:]
+            iv = hmac_digest(secret_key, b"admission-v5-iv", nonce)[:16]
+
+            cipher = Cipher(algorithms.AES(key), modes.CTR(iv), backend=default_backend())
+            decryptor = cipher.decryptor()
+            payload = decryptor.update(ciphertext) + decryptor.finalize()
+
+            expected_nonce = hmac_digest(secret_key, b"admission-v5-nonce", payload)[:2]
+            if not hmac.compare_digest(nonce, expected_nonce):
+                raise ValueError("Invalid checksum")
+
+            meta = payload[0]
+            if meta >> 4 != 5:
+                raise ValueError("Invalid compact format")
+            name_len = meta & 0b111
+            school_len = payload[1]
+            if name_len > 6 or school_len > 8:
+                raise ValueError("Invalid field length")
+
+            ticket_len = 14 if meta & 0b1000 else 13
+            ticket = unpack_digits(payload[2:9])[-ticket_len:]
+            birth_date = unpack_digits(payload[9:13])
+            name = unpack_chinese_name(payload[13:25], name_len)
+            school = unpack_chinese_name(payload[25:40], school_len)
+
+            return {
+                "ok": True,
+                "format": "v5",
+                "ticket": ticket,
+                "birth_date": birth_date,
+                "name": name,
+                "school": school,
+                "name_hash": None,
+            }
+
         if len(compact_data) == 26:
             nonce = compact_data[:2]
             ciphertext = compact_data[2:]
@@ -201,6 +238,8 @@ def main():
                 print(f"考生姓名: {result['name']}")
             elif result.get("name_hash"):
                 print(f"姓名核验指纹: {result['name_hash']}")
+            if result.get("school"):
+                print(f"毕业学校: {result['school']}")
             ticket = result["ticket"]
             birth_date = result.get("birth_date", "")
             if birth_date:

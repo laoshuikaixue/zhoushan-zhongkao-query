@@ -6,6 +6,7 @@ type AdmissionVerificationPayload = {
   ticket: string;
   birthDate: string;
   candidateName?: string;
+  graduationSchool?: string;
 };
 
 const CJK_BASE = 0x4e00;
@@ -23,10 +24,10 @@ function packDigits(value: string, digits: number) {
   return bytes;
 }
 
-function packChineseName(name: string) {
-  const chars = Array.from(name.trim());
-  if (chars.length > 6) {
-    throw new Error("Candidate name must be 6 Chinese characters or fewer");
+function packCJKString(text: string, maxChars: number, totalBytes: number) {
+  const chars = Array.from(text.trim());
+  if (chars.length > maxChars) {
+    throw new Error(`Text must be ${maxChars} Chinese characters or fewer`);
   }
 
   let bits = BigInt(0);
@@ -34,23 +35,24 @@ function packChineseName(name: string) {
   for (const char of chars) {
     const codePoint = char.codePointAt(0);
     if (codePoint === undefined || codePoint < CJK_BASE || codePoint > CJK_END) {
-      throw new Error("Candidate name contains unsupported characters");
+      throw new Error("Text contains unsupported characters");
     }
     bits = (bits << BigInt(15)) | BigInt(codePoint - CJK_BASE);
     bitLength += 15;
   }
 
-  bits <<= BigInt(96 - bitLength);
-  const bytes = Buffer.alloc(12);
-  for (let i = 11; i >= 0; i -= 1) {
+  bits <<= BigInt(totalBytes * 8 - bitLength);
+  const bytes = Buffer.alloc(totalBytes);
+  for (let i = totalBytes - 1; i >= 0; i -= 1) {
     bytes[i] = Number(bits & BigInt(0xff));
     bits >>= BigInt(8);
   }
 
-  return {
-    length: chars.length,
-    bytes,
-  };
+  return { length: chars.length, bytes };
+}
+
+function packChineseName(name: string) {
+  return packCJKString(name, 6, 12);
 }
 
 function base64UrlEncode(value: Buffer) {
@@ -73,6 +75,7 @@ export async function encryptAdmissionData({
   ticket,
   birthDate,
   candidateName = "",
+  graduationSchool = "",
 }: AdmissionVerificationPayload): Promise<string> {
   if (!/^\d{13,14}$/.test(ticket)) {
     throw new Error("Invalid ticket number");
@@ -86,15 +89,18 @@ export async function encryptAdmissionData({
   // 使用密钥的 SHA-256 摘要生成 32 字节 AES 密钥。
   const key = crypto.createHash("sha256").update(secretKey).digest();
   const name = packChineseName(candidateName);
+  const school = packCJKString(graduationSchool, 8, 15);
 
-  const payload = Buffer.alloc(24);
-  payload[0] = (4 << 4) | (ticket.length === 14 ? 0b1000 : 0) | name.length;
-  packDigits(ticket.padStart(14, "0"), 14).copy(payload, 1);
-  packDigits(birthDate, 8).copy(payload, 8);
-  name.bytes.copy(payload, 12);
+  const payload = Buffer.alloc(40);
+  payload[0] = (5 << 4) | (ticket.length === 14 ? 0b1000 : 0) | name.length;
+  payload[1] = school.length;
+  packDigits(ticket.padStart(14, "0"), 14).copy(payload, 2);
+  packDigits(birthDate, 8).copy(payload, 9);
+  name.bytes.copy(payload, 13);
+  school.bytes.copy(payload, 25);
 
-  const nonce = hmac(secretKey, Buffer.from("admission-v4-nonce"), payload).subarray(0, 2);
-  const iv = hmac(secretKey, Buffer.from("admission-v4-iv"), nonce).subarray(0, 16);
+  const nonce = hmac(secretKey, Buffer.from("admission-v5-nonce"), payload).subarray(0, 2);
+  const iv = hmac(secretKey, Buffer.from("admission-v5-iv"), nonce).subarray(0, 16);
   const cipher = crypto.createCipheriv("aes-256-ctr", key, iv);
   const ciphertext = Buffer.concat([cipher.update(payload), cipher.final()]);
 
